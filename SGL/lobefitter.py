@@ -40,6 +40,7 @@ centermarker = {"marker": "o", "linestyle": "None", "ec":"cyan", "fc":"cyan", "s
 centermarker_ = {"marker": "o", "linestyle": "None", "ec":"cyan", "fc":"None", "s":50}
 hotspotmarker = {"marker": "o", "linestyle": "None", "ec":"green", "fc":"cyan", "s":2}
 hotspotmarker_ = {"marker": "o", "linestyle": "None", "ec":"green", "fc":"None", "s":50}
+measurementmarker_ = {"marker": "x", "linestyle": "None", "ec":"black", "fc":"None", "s":50}
 
 excludemarker = {"marker": "x", "linestyle": "None", "color": "red", "linewidth": 0.75}
 excludemarker_ = {"marker": "None", "linestyle": "-", "color": "red", "linewidth": 0.75}
@@ -47,6 +48,7 @@ fillmarker = {"marker": "x", "linestyle": "None", "color": "blue", "linewidth": 
 fillmarker_ = {"marker": "None", "linestyle": "-", "color": "blue", "linewidth": 0.75}
 lobemarker_0 = {"marker": "x", "linestyle": "None", "color": "green", "linewidth": 0.75}
 lobemarker_1 = {"marker": "None", "linestyle": "-", "color": "green", "linewidth": 0.75}
+
 
 
 class Coords:
@@ -84,6 +86,7 @@ class Interact:
         self.lobe = SelectCoords()
         self.exclude = SelectCoords()
         self.fill = SelectCoords()
+        self.measurements = SelectCoords()
     
     def __call__(self, event):
         if event.inaxes != self.ax.axes: return
@@ -102,12 +105,16 @@ class Interact:
         if event.key == 'b':
             self.lobe.j.append(int(event.xdata))
             self.lobe.i.append(int(event.ydata))
+        if event.key == 'm':
+            self.measurements.j.append(int(event.xdata))
+            self.measurements.i.append(int(event.ydata))
 
         # This draws points onto the canvas      
         self.ax.scatter(self.center.j, self.center.i, **centermarker)
         self.ax.scatter(self.center.j, self.center.i, **centermarker_)
         self.ax.scatter(self.hotspot.j, self.hotspot.i, **hotspotmarker)
         self.ax.scatter(self.hotspot.j, self.hotspot.i, **hotspotmarker_)
+        self.ax.scatter(self.measurements.j, self.measurements.i, **measurementmarker_)
         
         if len(self.lobe.j)==1:
             line, = self.ax.plot(self.lobe.j, self.lobe.i, **lobemarker_0)
@@ -311,12 +318,12 @@ def OptimizeSkewGauss2D(image_data, beam_params, center, hotspot, stretch, image
         amp, amp_min, amp_max = np.nanmax(image_mask*image_data), -20, 2
     else:
         amp, amp_min, amp_max = np.nanmax(image_mask*image_data), 0, np.inf
-    rot,   rot_min,   rot_max = rotation, rotation-np.pi/18., rotation+np.pi/18. #rotation - np.pi/18, rotation + np.pi/18
+    rot,   rot_min,   rot_max = rotation, rotation-np.pi/36., rotation+np.pi/36. #rotation - np.pi/18, rotation + np.pi/18
     # print(rot*180/np.pi)ss
     mux,   mux_min,   mux_max   = hotspot.j, 0, 2*image_width
     muy,   muy_min,   muy_max   = hotspot.i, 0, 2*image_height
-    sigx,  sigx_min,  sigx_max  = np.sqrt(beam_params[0]**2 + beam_params[1]**2), 0, np.inf
-    sigy,  sigy_min,  sigy_max  = np.sqrt(beam_params[0]**2 + beam_params[1]**2), 0, np.inf
+    sigx,  sigx_min,  sigx_max  = 20*np.sqrt(beam_params[0]**2 + beam_params[1]**2), 0, np.inf
+    sigy,  sigy_min,  sigy_max  = 10*np.sqrt(beam_params[0]**2 + beam_params[1]**2), 0, np.inf
     skewx, skewx_min, skewx_max = -10, -1000, 0
 
     # define initial guess for Gaussian fit parameters
@@ -360,7 +367,7 @@ def OptimizeSkewGauss2D(image_data, beam_params, center, hotspot, stretch, image
     # ax0.imshow(image_pred)
     # plt.show()
 
-    return image_pred
+    return image_pred, result
 
     # get the location of the peak pixel in predicted image
     # hotspot_value, hotspot_loc = peakpixel(image_pred**2)
@@ -1221,26 +1228,80 @@ def FitObservedLobes(radioimage, hostimage):
         center = host_from_image(hostimage, radioimage)
 
     imdata, center, hotspots, w, cdelt =  select_radio_source(radioimage, center)
+    # print(cdelt)
 
-    image_preds = []
+    image_preds, results = [], []
     for hotspotPointer in range(0, len(hotspots.i)):
         hotspot = Coords(hotspots.i[hotspotPointer], hotspots.j[hotspotPointer])
         imdata_, image_mask = select_lobe(radioimage, hotspot, sigma=None)
-        image_pred = OptimizeSkewGauss2D(imdata_, cdelt, center=center, hotspot=hotspot, image_mask=image_mask, stretch='sqrt', w=w)
+        image_pred, result = OptimizeSkewGauss2D(imdata_, cdelt, center=center, hotspot=hotspot, image_mask=image_mask, stretch='sqrt', w=w)
         image_preds.append(image_pred)
+        results.append(result)
 
-    fig = plt.figure(figsize=(7,7))
-    ax = fig.add_axes([0.1, 0.1, 0.85, 0.85])#, projection=w)
-    norm = simple_norm(imdata, percent=99.5, stretch='sqrt')
-    ax.imshow(imdata, cmap='inferno', norm=norm)
-    ax.scatter(center.j, center.i, **centermarker)
-    ax.scatter(center.j, center.i, **centermarker_)
-    format(ax)
+    # fig = plt.figure(figsize=(7,7))
+    # ax = fig.add_axes([0.1, 0.1, 0.85, 0.85])#, projection=w)
+    # norm_ = simple_norm(imdata, percent=99.5, stretch='sqrt')
+    # ax.imshow(imdata, cmap='inferno', norm=norm_)
+    # ax.scatter(center.j, center.i, **centermarker)
+    # ax.scatter(center.j, center.i, **centermarker_)
+    # format(ax)
+    colors = ['red','magenta']
     for hotspotPointer in range(0, len(hotspots.i)):
+
+        fig = plt.figure(figsize=(7,7))
+        ax = fig.add_axes([0.1, 0.1, 0.85, 0.85])#, projection=w)
+        norm_ = simple_norm(imdata, percent=99.5, stretch='sqrt')
+        ax.imshow(imdata, cmap='inferno', norm=norm_)
+        ax.scatter(center.j, center.i, **centermarker)
+        ax.scatter(center.j, center.i, **centermarker_)
+        format(ax)
         #get the location of the peak pixel in predicted image
         hotspot_value, hotspot_loc = peakpixel(image_preds[hotspotPointer])
 
+        core_value = image_preds[hotspotPointer][center.i, center.j]
+        core_ratio = core_value/hotspot_value
+
         # get 1,2 and 3sigma values of peak
         levels = [hotspot_value*np.exp(-2)]
-        ax.contour(image_preds[hotspotPointer], levels=levels, colors='red', linewidths=1)
+        ax.contour(image_preds[hotspotPointer], levels=levels, colors=colors[hotspotPointer], linewidths=1)
+
+        result = results[hotspotPointer]
+        amplitude, rotation, mu_x, mu_y, sigma_pc1, sigma_pc2, skew_pc1 = result
+        ax.scatter(hotspot_loc.j, hotspot_loc.i, marker='x',c=colors[hotspotPointer])
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
+        imw, imh = np.abs(xlim[0])+np.abs(xlim[1]), np.abs(ylim[0])+np.abs(ylim[1])
+        imhyp = np.sqrt(imw**2+imh**2)
+
+        # draw ellipse orientation
+
+
+        ax.plot([hotspot_loc.j - np.cos(rotation)*(imhyp)*1, hotspot_loc.j + np.cos(rotation)*(imhyp)*1],[hotspot_loc.i + np.sin(rotation)*(imhyp)*1, hotspot_loc.i - np.sin(rotation)*(imhyp)*1],c=colors[hotspotPointer],lw=1, ls=':')
+        ax.plot([hotspot_loc.j - np.cos(rotation+np.pi/2.)*(imhyp)*1, hotspot_loc.j + np.cos(rotation+np.pi/2.)*(imhyp)*1],[hotspot_loc.i + np.sin(rotation+np.pi/2.)*(imhyp)*1, hotspot_loc.i - np.sin(rotation+np.pi/2.)*(imhyp)*1],c=colors[hotspotPointer],lw=1, ls=':')
+        
+        interact = Interact(ax)
+        plt.show()
+
+        jet_inner = Coords(interact.measurements.i[0], interact.measurements.j[0])
+        jet_outer = Coords(interact.measurements.i[1], interact.measurements.j[1])
+        trans_0 = Coords(interact.measurements.i[2], interact.measurements.j[2])
+        trans_1 = Coords(interact.measurements.i[3], interact.measurements.j[3])
+        
+        Dl = np.sqrt((center.i-jet_outer.i)**2+(center.j - jet_outer.j)**2)
+        Dlbar = np.sqrt((jet_inner.i-jet_outer.i)**2+(jet_inner.j - jet_outer.j)**2)
+        if Dlbar > Dl:
+            Dlbar = Dl
+        Rl = np.sqrt((trans_0.i-trans_1.i)**2+(trans_0.j - trans_1.j)**2)
+        core_to_peak_dist = np.sqrt((center.i-hotspot_loc.i)**2+(center.j - hotspot_loc.j)**2)
+
+        print('')
+        print('E1 = {:.3f}'.format(Dlbar/Dl))
+        print('E2 = {:.3f}'.format(core_ratio))
+        print('A = {:.3f}'.format((2*Dl)/Rl))
+        print('Pr = {:.3f}'.format(core_to_peak_dist/Dl))
+        print('')
+
+
     plt.show()
