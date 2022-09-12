@@ -1,3 +1,5 @@
+# /usr/bin/env python3
+
 # standard imports
 import pandas as pd
 import sys
